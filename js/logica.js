@@ -1,10 +1,12 @@
 // Funções puras: dinheiro, datas, agregações, "Colar" e CSV. Sem DOM, sem storage.
 
 const p2 = n => String(n).padStart(2, '0');
-const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+export const norm = s => s.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
 const fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 // ---------- dinheiro e datas ----------
+
+export const rotFreq = f => ({ 6: 'semestral', 12: 'anual' })[f] ?? 'mensal';
 
 export const fmt = cent => fmtBRL.format(cent / 100);
 
@@ -57,12 +59,17 @@ export function saldoConta(est, contaId, h) {
   return s;
 }
 
-export const saldoTotal = (est, h) => est.contas.reduce((t, c) => t + saldoConta(est, c.id, h), 0);
+// `ben` filtra por tipo de conta: undefined = todas, true = só benefícios (VR, iFood), false = só bancos
+export const ehBen = c => c?.tipo === 'beneficio';
+const doTipo = (est, ben) => ben === undefined ? () => true : l => ehBen(est.contas.find(c => c.id === l.contaId)) === ben;
 
-export function resumoMes(est, mes, h) {
-  const r = { entradas: 0, saidas: 0, previsto: 0 };
+export const saldoTotal = (est, h, ben) =>
+  est.contas.filter(c => ben === undefined || ehBen(c) === ben).reduce((t, c) => t + saldoConta(est, c.id, h), 0);
+
+export function resumoMes(est, mes, h, ben) {
+  const r = { entradas: 0, saidas: 0, previsto: 0 }, ok = doTipo(est, ben);
   for (const l of est.lancamentos) {
-    if (l.tipo === 'transf' || mesDe(l.data) !== mes) continue;
+    if (l.tipo === 'transf' || mesDe(l.data) !== mes || !ok(l)) continue;
     if (l.tipo === 'entrada') {
       if (l.data <= h) r.entradas += l.valor;
     } else if (l.data <= h) r.saidas += l.valor;
@@ -71,12 +78,13 @@ export function resumoMes(est, mes, h) {
   return r;
 }
 
-export function serieMensal(est, mesInicio, n, h) {
+export function serieMensal(est, mesInicio, n, h, ben) {
+  const ok = doTipo(est, ben);
   return Array.from({ length: n }, (_, i) => {
     const mes = addMeses(`${mesInicio}-01`, i).slice(0, 7);
     const s = { mes, saidasReal: 0, saidasPrev: 0, entradas: 0 };
     for (const l of est.lancamentos) {
-      if (l.tipo === 'transf' || mesDe(l.data) !== mes) continue;
+      if (l.tipo === 'transf' || mesDe(l.data) !== mes || !ok(l)) continue;
       if (l.tipo === 'entrada') s.entradas += l.valor;
       else if (l.data <= h) s.saidasReal += l.valor;
       else s.saidasPrev += l.valor;
@@ -86,10 +94,10 @@ export function serieMensal(est, mesInicio, n, h) {
   });
 }
 
-export function porCategoria(est, mes) {
-  const m = new Map();
+export function porCategoria(est, mes, ben) {
+  const m = new Map(), ok = doTipo(est, ben);
   for (const l of est.lancamentos) {
-    if (l.tipo !== 'saida' || mesDe(l.data) !== mes) continue;
+    if (l.tipo !== 'saida' || mesDe(l.data) !== mes || !ok(l)) continue;
     const k = l.catId ?? null;
     m.set(k, (m.get(k) ?? 0) + l.valor);
   }

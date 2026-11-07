@@ -217,7 +217,7 @@ const recorrentes = () => folhaLista({
   titulo: 'Recorrentes',
   itens: () => ativas().map(r => {
     const c = app.est.contas.find(x => x.id === r.contaId);
-    return { id: r.id, nome: r.desc, sub: `Todo dia ${r.dia}${c ? ` · ${c.nome}` : ''}`, dir: (r.tipo === 'entrada' ? '+' : '−') + fmt(r.valor) };
+    return { id: r.id, nome: r.desc, sub: `${(r.freq ?? 1) === 1 ? 'Todo mês' : r.freq === 6 ? 'A cada 6 meses' : 'Todo ano'}, dia ${r.dia}${c ? ` · ${c.nome}` : ''}`, dir: (r.tipo === 'entrada' ? '+' : '−') + fmt(r.valor) };
   }),
   vazio: 'Nenhum lançamento recorrente',
   async aoTocar(id) {

@@ -1,6 +1,6 @@
 // Tela Análise: saídas por mês, categorias do mês selecionado, tabela mensal e compromissos futuros.
 import { app } from './app.js';
-import { fmt, mesDe, addMeses, serieMensal, porCategoria } from './logica.js';
+import { fmt, mesDe, addMeses, serieMensal, porCategoria, ehBen } from './logica.js';
 import { esc } from './ui.js';
 
 const PERIODOS = [['mes', 'Mês'], ['6m', '6 meses'], ['ano', 'Ano']];
@@ -9,11 +9,12 @@ let per = 'mes', sel = null;
 const css = `
 .an-chart { display: flex; align-items: flex-end; gap: 6px; height: 140px; padding-top: 6px; }
 .an-col { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; touch-action: manipulation; }
-.an-bar { display: flex; flex-direction: column; justify-content: flex-end; transform-origin: bottom; animation: cresce .45s var(--spring) backwards; animation-delay: calc(var(--k) * 25ms); }
+.an-bar { display: flex; flex-direction: column; justify-content: flex-end; overflow: hidden; border-radius: 6px 6px 3px 3px; transform-origin: bottom; animation: cresce .45s var(--spring) backwards; animation-delay: calc(var(--k) * 25ms); }
 .an-bar i { display: block; }
-.an-bar .r { background: var(--blue); border-radius: 6px 6px 3px 3px; }
-.an-bar .p { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--blue) 50%, transparent) 0 4px, color-mix(in srgb, var(--blue) 18%, transparent) 4px 8px); border-radius: 6px 6px 0 0; }
-.an-bar .p + .r { border-radius: 0 0 3px 3px; }
+.an-bar i, .an-sw { --c: var(--blue); }
+.an-bar .v, .an-sw.v { --c: var(--orange); }
+.an-bar .r { background: var(--c); }
+.an-bar .p { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 50%, transparent) 0 4px, color-mix(in srgb, var(--c) 18%, transparent) 4px 8px); }
 .an-col.now .an-bar { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
 .an-col:active .an-bar { transform: scaleY(.97); transition: transform .12s var(--out); }
 .an-mes { display: flex; gap: 6px; margin-top: 8px; }
@@ -23,7 +24,10 @@ const css = `
 .an-cat:last-child { border-bottom: 0; }
 .an-cat > div { display: flex; justify-content: space-between; gap: 8px; font-size: 15px; }
 .an-cat .tr { height: 6px; border-radius: 3px; margin-top: 6px; background: color-mix(in srgb, var(--t) 7%, transparent); overflow: hidden; }
-.an-cat .tr i { display: block; height: 100%; border-radius: 3px; transform-origin: left; animation: an-w .5s var(--spring) backwards; }
+.an-cat .tr span { display: flex; height: 100%; border-radius: 3px; overflow: hidden; transform-origin: left; animation: an-w .5s var(--spring) backwards; }
+.an-cat .tr i { display: block; height: 100%; }
+.an-cat small { margin-left: 6px; color: var(--orange); font-size: 12px; }
+.an-tab tr.ben td { padding-top: 0; border-top: 0; font-size: 12px; color: var(--orange); }
 @keyframes an-w { from { transform: scaleX(0); } }
 .an-tab { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 .an-tab th { font-size: 11px; font-weight: 500; color: var(--t2); text-align: right; padding: 8px 0; }
@@ -32,7 +36,7 @@ const css = `
 .an-tab tr.sel td { font-weight: 600; }
 .an-tab tr.sel td:first-child { color: var(--blue); }
 .an-sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
-@media (prefers-reduced-motion: reduce) { .an-bar, .an-cat .tr i { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .an-bar, .an-cat .tr span { animation: none; } }
 `;
 function estilo() {
   if (document.getElementById('an-css')) return;
@@ -51,35 +55,41 @@ export function render(el) {
   estilo();
   const est = app.est, hoje = app.hoje, atual = mesDe(hoje);
   const [ini, n] = janela(atual);
-  const serie = serieMensal(est, ini, n, hoje);
+  const serie = serieMensal(est, ini, n, hoje, false), ben = serieMensal(est, ini, n, hoje, true);
+  const temBen = est.contas.some(ehBen);
   if (!serie.some(s => s.mes === sel)) sel = atual;
 
   const vazio = !est.lancamentos.length && !est.regras.length;
-  const max = Math.max(1, ...serie.map(s => s.saidas));
+  const max = Math.max(1, ...serie.map((s, i) => s.saidas + ben[i].saidas));
+  const seg = (v, cls) => (v ? `<i class="${cls}" style="flex:${v}"></i>` : '');
   const alt = v => (v ? Math.max(3, (v / max) * 100) : 0);
 
   const grafico = () => `
-    <div class="an-chart" role="img" aria-label="Saídas por mês">${serie.map((s, i) => `
-      <button class="an-col${s.mes === atual ? ' now' : ''}" data-m="${s.mes}" aria-label="${esc(rotMes(s.mes, 1))}: ${fmt(s.saidas)}">
-        <div class="an-bar" style="--k:${i};height:${alt(s.saidas)}%">
-          ${s.saidasPrev ? `<i class="p" style="flex:${s.saidasPrev}"></i>` : ''}${s.saidasReal ? `<i class="r" style="flex:${s.saidasReal}"></i>` : ''}
+    <div class="an-chart" role="img" aria-label="Saídas por mês">${serie.map((s, i) => { const v = ben[i]; return `
+      <button class="an-col${s.mes === atual ? ' now' : ''}" data-m="${s.mes}" aria-label="${esc(rotMes(s.mes, 1))}: ${fmt(s.saidas)}${v.saidas ? `, benefícios ${fmt(v.saidas)}` : ''}">
+        <div class="an-bar" style="--k:${i};height:${alt(s.saidas + v.saidas)}%">
+          ${seg(v.saidasPrev, 'p v')}${seg(v.saidasReal, 'r v')}${seg(s.saidasPrev, 'p')}${seg(s.saidasReal, 'r')}
         </div>
-      </button>`).join('')}</div>
+      </button>`; }).join('')}</div>
     <div class="an-mes">${serie.map(s => `<span data-m="${s.mes}" class="${s.mes === sel ? 'sel' : ''}">${esc(rotMes(s.mes))}</span>`).join('')}</div>
-    <div class="leg"><span><i class="an-sw" style="background:var(--blue)"></i>Realizado</span><span><i class="an-sw" style="background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blue) 50%,transparent) 0 2px,color-mix(in srgb,var(--blue) 18%,transparent) 2px 4px)"></i>Previsto</span></div>`;
+    <div class="leg"><span><i class="an-sw" style="background:var(--blue)"></i>Realizado</span><span><i class="an-sw" style="background:repeating-linear-gradient(135deg,color-mix(in srgb,var(--blue) 50%,transparent) 0 2px,color-mix(in srgb,var(--blue) 18%,transparent) 2px 4px)"></i>Previsto</span>${temBen ? '<span><i class="an-sw" style="background:var(--c)"></i>Bancos</span><span><i class="an-sw v" style="background:var(--c)"></i>Benefícios</span>' : ''}</div>`;
 
   const detalhe = () => {
-    const cats = porCategoria(est, sel), topo = Math.max(1, ...cats.map(c => c.total));
+    const m = new Map();
+    for (const [lado, lista] of [['b', porCategoria(est, sel, false)], ['v', porCategoria(est, sel, true)]])
+      for (const c of lista) { const x = m.get(c.catId) ?? { catId: c.catId, b: 0, v: 0 }; x[lado] = c.total; m.set(c.catId, x); }
+    const cats = [...m.values()].map(c => ({ ...c, total: c.b + c.v })).sort((a, b) => b.total - a.total);
+    const topo = Math.max(1, ...cats.map(c => c.total));
     const lista = cats.length ? cats.map(c => {
       const k = c.catId == null ? null : est.categorias.find(x => x.id === c.catId);
-      return `<div class="an-cat"><div><span>${esc(k ? k.nome : 'Sem categoria')}</span><b>${fmt(c.total)}</b></div>
-        <div class="tr"><i style="width:${(c.total / topo) * 100}%;background:${k ? cor(k.cor) : 'var(--t2)'}"></i></div></div>`;
+      return `<div class="an-cat"><div><span>${esc(k ? k.nome : 'Sem categoria')}${c.v ? `<small>${fmt(c.v)} benefício</small>` : ''}</span><b>${fmt(c.total)}</b></div>
+        <div class="tr"><span style="width:${(c.total / topo) * 100}%">${c.b ? `<i style="flex:${c.b};background:${k ? cor(k.cor) : 'var(--t2)'}"></i>` : ''}${c.v ? `<i style="flex:${c.v};background:var(--orange)"></i>` : ''}</span></div></div>`;
     }).join('') : '<p class="vazio" style="padding:20px">Sem saídas neste mês.</p>';
     return `<div class="lab"><span>Por categoria</span><span style="text-transform:capitalize">${esc(rotMes(sel, 1))}</span></div>
       <div class="card">${lista}</div>
       <div class="lab"><span>Mês a mês</span></div>
       <div class="card"><table class="an-tab"><thead><tr><th>Mês</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead><tbody>
-        ${serie.map(s => { const d = s.entradas - s.saidas; return `<tr class="${s.mes === sel ? 'sel' : ''}"><td>${esc(rotMes(s.mes))}</td><td>${fmt(s.entradas)}</td><td>${fmt(s.saidas)}</td><td class="${d < 0 ? 'neg-c' : 'pos'}">${fmt(d)}</td></tr>`; }).join('')}
+        ${serie.map((s, i) => { const d = s.entradas - s.saidas, v = ben[i]; return `<tr class="${s.mes === sel ? 'sel' : ''}"><td>${esc(rotMes(s.mes))}</td><td>${fmt(s.entradas)}</td><td>${fmt(s.saidas)}</td><td class="${d < 0 ? 'neg-c' : 'pos'}">${fmt(d)}</td></tr>${v.entradas || v.saidas ? `<tr class="ben"><td>benefícios</td><td>${fmt(v.entradas)}</td><td>${fmt(v.saidas)}</td><td>${fmt(v.entradas - v.saidas)}</td></tr>` : ''}`; }).join('')}
       </tbody></table></div>`;
   };
 

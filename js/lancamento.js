@@ -1,8 +1,8 @@
 // Painel de lançamento: novo e edição (spec §6.5).
 import { app } from './app.js';
 import { abrirFolha, escolher, toast, h, esc } from './ui.js';
-import { adicionar, editar, apagarDesfazivel } from './estado.js';
-import { parseValor, fmt, dividir, addMeses } from './logica.js';
+import { adicionar, editar, apagarDesfazivel, replicar, desfazerReplica } from './estado.js';
+import { parseValor, fmt, dividir, addMeses, norm, rotFreq } from './logica.js';
 import { abrirConta, escolherConta, escolherCategoria, treme } from './cadastros.js';
 
 const TIPOS = [['saida', 'Saída'], ['entrada', 'Entrada'], ['transf', 'Transferência']];
@@ -27,6 +27,18 @@ function pilulas(raiz, anima) {
 
 const nomeConta = id => app.est.contas.find(c => c.id === id)?.nome;
 const nomeCat = id => app.est.categorias.find(c => c.id === id)?.nome;
+const FREQS = [['1', 'Mensal'], ['6', 'Semestral'], ['12', 'Anual']];
+const REPLICAS = [['m1', 'Próximo mês', 1, 1], ['m6', 'Todo mês, por 6 meses', 1, 6], ['m12', 'Todo mês, por 12 meses', 1, 12], ['s', 'A cada 6 meses', 6], ['a', 'Todo ano', 12]];
+const mesAno = iso => new Date(iso + 'T12:00').toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }).replace('.', '').replace(' de ', '/');
+
+// descrições já usadas do tipo, mais recentes primeiro; cada uma aponta para o último lançamento com ela
+function usadas(tipo) {
+  const m = new Map();
+  for (const x of [...app.est.lancamentos].filter(x => x.tipo === tipo && x.desc && x.data <= app.hoje).sort((a, b) => (a.data < b.data ? 1 : -1)))
+    if (!m.has(norm(x.desc))) m.set(norm(x.desc), x);
+  return m;
+}
+
 const linha = (a, rotulo, valor) => `<button type="button" class="fld" data-a="${a}" data-campo="${a}"><span>${rotulo}</span><span>${esc(valor)} ›</span></button>`;
 
 export function abrirLancamento(l) {
@@ -41,7 +53,15 @@ export function abrirLancamento(l) {
 
   const s = edit
     ? { tipo: l.tipo, desc: l.desc ?? '', catId: l.catId ?? '', contaId: l.contaId, paraId: l.paraId ?? null, data: l.data, modo: 'unico', n: '3' }
-    : { tipo: 'saida', desc: '', catId: '', contaId: app.est.contas[0].id, paraId: null, data: app.hoje, modo: 'unico', n: '3' };
+    : { tipo: 'saida', desc: '', catId: '', contaId: app.est.contas[0].id, paraId: null, data: app.hoje, modo: 'unico', n: '3', freq: '1' };
+  const tocou = { catId: false, contaId: false }; // escolhido à mão: o preenchimento automático não troca
+  let sugest = new Map();
+  const replicavel = edit && l.tipo === 'saida' && !l.grupo && !l.regraId;
+  const replicas = () => `<div class="lab">Replicar</div><div class="grp">${REPLICAS.map(([op, rot, passo, n]) => {
+    const ini = addMeses(l.data, passo, Number(l.data.slice(8)));
+    const quando = n ? (n === 1 ? mes(ini) : `${mes(ini)} → ${mes(addMeses(l.data, n, Number(l.data.slice(8))))}`) : `a partir de ${mesAno(ini)}`;
+    return `<button type="button" class="fld" data-rep="${op}"><span>${rot}</span><span>${esc(quando)}</span></button>`;
+  }).join('')}</div>`;
   const valor0 = edit ? (l.valor / 100).toFixed(2).replace('.', ',') : '';
 
   const f = abrirFolha(h(`
@@ -50,6 +70,7 @@ export function abrirLancamento(l) {
     <input class="amt" inputmode="decimal" placeholder="R$ 0,00" aria-label="Valor" autocomplete="off" value="${valor0}">
     <div class="hint" aria-live="polite"></div>
     <div class="form"></div>
+    ${replicavel ? replicas() : ''}
     <button class="btn" data-a="salvar" style="margin-top:16px">${edit ? 'Salvar alterações' : 'Salvar'}</button>
     ${edit ? '<button class="btn dest" data-a="apagar">Apagar lançamento</button>' : ''}`));
   const $ = x => f.el.querySelector(x);
@@ -57,7 +78,9 @@ export function abrirLancamento(l) {
 
   function form() {
     const t = s.tipo;
-    const desc = `<label class="fld" data-campo="desc"><span>Descrição</span><input data-k="desc" value="${esc(s.desc)}" placeholder="${t === 'transf' ? 'Opcional' : t === 'entrada' ? 'Ex.: Salário' : 'Ex.: Mercado'}" maxlength="60" autocomplete="off"></label>`;
+    sugest = edit || t === 'transf' ? new Map() : usadas(t);
+    const lista = sugest.size ? `<datalist id="sug-desc">${[...sugest.values()].slice(0, 60).map(x => `<option value="${esc(x.desc)}">`).join('')}</datalist>` : '';
+    const desc = `<label class="fld" data-campo="desc"><span>Descrição</span><input data-k="desc" value="${esc(s.desc)}" placeholder="${t === 'transf' ? 'Opcional' : t === 'entrada' ? 'Ex.: Salário' : 'Ex.: Mercado'}" maxlength="60" autocomplete="off"${lista ? ' list="sug-desc"' : ''}>${lista}</label>`;
     const data = `<label class="fld"><span>Data</span><input type="date" data-k="data" value="${esc(s.data)}"></label>`;
     if (t === 'transf')
       return `<div class="grp">${linha('de', 'De', nomeConta(s.contaId) ?? 'Escolher')}</div>
@@ -67,6 +90,7 @@ export function abrirLancamento(l) {
     let extra = '';
     if (!edit && t === 'saida') {
       extra = `<div class="fld"><span>Tipo</span>${seg('modo', [['unico', 'Única'], ['parcelado', 'Parcelado'], ['recorrente', 'Assinatura']], s.modo)}</div>`;
+      if (s.modo === 'recorrente') extra += `<div class="fld"><span>Frequência</span>${seg('freq', FREQS, s.freq)}</div>`;
       if (s.modo === 'parcelado')
         extra += `<label class="fld" data-campo="n"><span>Parcelas</span><input data-k="n" type="number" inputmode="numeric" min="2" max="48" value="${esc(s.n)}"></label>`;
     } else if (!edit) {
@@ -76,8 +100,16 @@ export function abrirLancamento(l) {
   }
 
   function dica() {
-    if (edit) return l.parcela ? `Parcela ${l.parcela[0]} de ${l.parcela[1]}` : l.regraId ? 'Repete todo mês' : '';
-    if (s.modo === 'recorrente') return s.data ? `Repete todo mês no dia ${Number(s.data.slice(8))}` : '';
+    if (edit) {
+      if (l.parcela) return `Parcela ${l.parcela[0]} de ${l.parcela[1]}`;
+      const r = l.regraId && app.est.regras.find(x => x.id === l.regraId);
+      return r ? `Repete: ${rotFreq(r.freq)}` : l.regraId ? 'Recorrente' : '';
+    }
+    if (s.modo === 'recorrente') {
+      if (!s.data) return '';
+      const d = Number(s.data.slice(8));
+      return s.tipo === 'entrada' || s.freq === '1' ? `Repete todo mês no dia ${d}` : `Repete a cada ${s.freq} meses no dia ${d} · próxima em ${mesAno(addMeses(s.data, Number(s.freq), d))}`;
+    }
     if (s.modo !== 'parcelado') return '';
     const n = Number(s.n), v = parseValor(amt.value);
     if (!Number.isInteger(n) || n < 2 || n > 48) return 'Parcelas de 2 a 48';
@@ -101,9 +133,29 @@ export function abrirLancamento(l) {
   F.addEventListener('input', e => {
     const k = e.target.dataset.k; if (!k) return;
     s[k] = e.target.value;
+    if (k === 'desc') preencher();
     dicaEl.textContent = dica();
   });
   F.addEventListener('change', e => { if (e.target.dataset.k === 'data') dicaEl.textContent = dica(); });
+
+  // descrição igual a uma já usada: copia categoria e conta do último lançamento com ela (sem repintar, para não perder o foco)
+  function preencher() {
+    const x = sugest.get(norm(s.desc.trim()));
+    if (!x) return;
+    if (!tocou.catId && app.est.categorias.some(c => c.id === x.catId)) s.catId = x.catId;
+    if (!tocou.contaId && app.est.contas.some(c => c.id === x.contaId)) s.contaId = x.contaId;
+    F.querySelector('[data-a=cat] span:last-child').textContent = `${nomeCat(s.catId) ?? 'Sem categoria'} ›`;
+    F.querySelector('[data-a=conta] span:last-child').textContent = `${nomeConta(s.contaId) ?? 'Escolher'} ›`;
+  }
+
+  function replicarLanc(op) {
+    const r = replicar(app.est, l.id, op, app.hoje);
+    if (!r) return;
+    app.salvarERender();
+    f.fechar();
+    const msg = r.regraId ? `Assinatura ${op === 's' ? 'semestral' : 'anual'} criada` : r.ids.length === 1 ? '1 cobrança criada' : `${r.ids.length} cobranças criadas`;
+    toast(msg, { acao: 'Desfazer', onAcao: () => { desfazerReplica(app.est, r); app.salvarERender(); } });
+  }
 
   let salvando = false;
   async function salvar() {
@@ -131,7 +183,7 @@ export function abrirLancamento(l) {
       }
       editar(app.est, l.id, dados, escopo, app.hoje);
     } else {
-      adicionar(app.est, s.modo === 'parcelado' ? { ...dados, n } : dados, s.modo, app.hoje);
+      adicionar(app.est, s.modo === 'parcelado' ? { ...dados, n } : s.modo === 'recorrente' && s.tipo === 'saida' ? { ...dados, freq: Number(s.freq) } : dados, s.modo, app.hoje);
     }
     app.salvarERender();
     f.fechar();
@@ -161,16 +213,19 @@ export function abrirLancamento(l) {
         for (const b of principal.children) b.classList?.toggle('on', b === sb);
         pilulas(principal.parentElement, true);
         pintar(dir);
-      } else { s.modo = k; pintar(); }
+      } else if (id === 'freq') { s.freq = k; pintar(); }
+      else { s.modo = k; pintar(); }
       return;
     }
+    const rp = e.target.closest('[data-rep]');
+    if (rp) return replicarLanc(rp.dataset.rep);
     const b = e.target.closest('[data-a]'); if (!b) return;
     const a = b.dataset.a;
     if (a === 'cancelar') f.fechar();
     else if (a === 'salvar') salvar();
     else if (a === 'apagar') apagarLanc();
-    else if (a === 'cat') { const r = await escolherCategoria(s.catId); if (r !== null) { s.catId = r; pintar(); } }
-    else if (a === 'conta') { const r = await escolherConta(s.contaId); if (r) { s.contaId = r; pintar(); } }
+    else if (a === 'cat') { const r = await escolherCategoria(s.catId); if (r !== null) { s.catId = r; tocou.catId = true; pintar(); } }
+    else if (a === 'conta') { const r = await escolherConta(s.contaId); if (r) { s.contaId = r; tocou.contaId = true; pintar(); } }
     else if (a === 'de') {
       const r = await escolherConta(s.contaId);
       if (r) { s.contaId = r; if (s.paraId === r) s.paraId = null; pintar(); }

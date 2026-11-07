@@ -2,7 +2,7 @@
 import { app } from './app.js';
 import { esc, escolher, toast } from './ui.js';
 import { apagarDesfazivel } from './estado.js';
-import { filtrar, fmt, mesDe, addMeses, hoje } from './logica.js';
+import { filtrar, fmt, mesDe, addMeses, hoje, rotFreq } from './logica.js';
 import { abrirLancamento } from './lancamento.js';
 
 const reduzido = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,6 +31,10 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 
 // ---------- estado da tela ----------
 let mes, f = { contaId: '', catId: '', tipo: '', q: '' }, busca = false;
+// abre o extrato do mês atual mostrando só uma conta (card da conta no Início)
+export function filtrarConta(contaId) {
+  f = { contaId, catId: '', tipo: '', q: '' }; busca = false; mes = mesDe(app.hoje);
+}
 const TIPOS = [['', 'Todos'], ['saida', 'Saídas'], ['entrada', 'Entradas'], ['transf', 'Transferências'], ['parcela', 'Parcelas'], ['assinatura', 'Assinaturas']];
 
 const dia = iso => new Date(iso + 'T12:00');
@@ -53,7 +57,7 @@ export function linha(l, comData) {
   if (l.tipo === 'transf') sub.push(`${esc(c.sigla)} → ${esc(conta(l.paraId).sigla)}`);
   else sub.push(cat ? `<i class="dot" style="background:${esc(cat.cor)}"></i>${esc(cat.nome)}` : 'Sem categoria');
   if (l.parcela) sub.push(l.parcela[1] > l.parcela[0] ? `faltam ${l.parcela[1] - l.parcela[0]}` : 'última');
-  else if (l.regraId) sub.push('mensal');
+  else if (l.regraId) sub.push(rotFreq(est.regras.find(r => r.id === l.regraId)?.freq));
   if (comData) sub.push(curta(l.data));
   const v = l.tipo === 'transf' ? `<span class="t2">${fmt(l.valor)}</span>`
     : l.tipo === 'entrada' ? `<span class="pos">+${fmt(l.valor)}</span>` : `−${fmt(l.valor)}`;

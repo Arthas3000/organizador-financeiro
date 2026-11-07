@@ -53,14 +53,14 @@ const diaAnterior = iso => {
 const diaDe = iso => Number(iso.slice(8));
 
 export function adicionar(est, dados, modo, hojeIso) {
-  const { n, ...base } = dados;
+  const { n, freq, ...base } = dados;
   if (modo === 'parcelado') {
     const grupo = novoId(), dia = diaDe(base.data);
     dividir(base.valor, n).forEach((valor, i) =>
       est.lancamentos.push({ ...base, id: novoId(), valor, data: addMeses(base.data, i, dia), grupo, parcela: [i + 1, n] }));
   } else if (modo === 'recorrente') {
     const { tipo, valor, desc, contaId, data } = base;
-    est.regras.push({ id: novoId(), tipo, valor, desc, contaId, catId: base.catId ?? null, dia: diaDe(data), inicio: data, fim: null, puladas: [] });
+    est.regras.push({ id: novoId(), tipo, valor, desc, contaId, catId: base.catId ?? null, dia: diaDe(data), inicio: data, fim: null, puladas: [], freq: freq ?? 1 });
     completarRecorrentes(est, hojeIso);
   } else {
     est.lancamentos.push({ ...base, id: novoId() });
@@ -72,13 +72,39 @@ export function completarRecorrentes(est, hojeIso) {
   for (const r of est.regras) {
     const refs = new Set([...(r.puladas ?? []), ...est.lancamentos.filter(l => l.regraId === r.id).map(l => l.ref)]);
     for (let i = 0; ; i++) {
-      const data = addMeses(r.inicio, i, r.dia);
+      const data = addMeses(r.inicio, i * (r.freq ?? 1), r.dia); // freq em meses: 1, 6 ou 12
       if (mesDe(data) > ultimoMes || (r.fim && data > r.fim)) break;
       const ref = mesDe(data);
       if (!refs.has(ref))
         est.lancamentos.push({ id: novoId(), tipo: r.tipo, valor: r.valor, desc: r.desc, contaId: r.contaId, catId: r.catId, data, regraId: r.id, ref });
     }
   }
+}
+
+// Replica um gasto único. 'm1' | 'm6' | 'm12' = N cópias mensais avulsas; 's' | 'a' = vira assinatura semestral/anual
+// a partir do próximo período. Devolve o que foi criado, para desfazer.
+export function replicar(est, id, op, hojeIso) {
+  const l = est.lancamentos.find(x => x.id === id);
+  if (!l) return null;
+  const { tipo, valor, desc, contaId } = l, catId = l.catId ?? null, dia = diaDe(l.data);
+  if (op === 's' || op === 'a') {
+    const freq = op === 's' ? 6 : 12, regraId = novoId();
+    est.regras.push({ id: regraId, tipo, valor, desc, contaId, catId, dia, inicio: addMeses(l.data, freq, dia), fim: null, puladas: [], freq });
+    completarRecorrentes(est, hojeIso);
+    return { ids: [], regraId };
+  }
+  const ids = Array.from({ length: { m1: 1, m6: 6, m12: 12 }[op] }, (_, i) => {
+    const novo = { tipo, valor, desc, contaId, catId, data: addMeses(l.data, i + 1, dia), id: novoId() };
+    est.lancamentos.push(novo);
+    return novo.id;
+  });
+  return { ids, regraId: null };
+}
+
+export function desfazerReplica(est, { ids, regraId }) {
+  const fora = new Set(ids);
+  est.lancamentos = est.lancamentos.filter(x => !fora.has(x.id) && (!regraId || x.regraId !== regraId));
+  if (regraId) est.regras = est.regras.filter(r => r.id !== regraId);
 }
 
 export function encerrarRegra(est, regraId, dataIso) {

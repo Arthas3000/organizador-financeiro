@@ -11,7 +11,7 @@ export function treme(el) {
 }
 
 const corHtml = atual => `<div class="grp"><div class="cores" role="radiogroup" aria-label="Cor">${CORES.map((c, i) =>
-  `<button type="button" class="cor" role="radio" aria-checked="${c === atual}" aria-label="Cor ${i + 1}" data-cor="${c}" style="background:${c};--c:${c}"></button>`).join('')}</div></div>`;
+  `<button type="button" class="cor" role="radio" aria-checked="${c === atual}" aria-label="Cor ${i + 1}" data-cor="${c}" style="background-color:${c};--c:${c}"></button>`).join('')}</div></div>`;
 
 // liga o seletor de cor dentro de `el`; devolve getter da cor atual
 function ligarCores(el, inicial) {
@@ -53,6 +53,7 @@ export function abrirConta(conta) {
         <label class="fld"><span>Sigla</span><input name="sigla" maxlength="2" autocapitalize="characters" autocomplete="off" placeholder="IT" value="${esc(conta?.sigla)}"></label>
         <div class="fld"><span>Saldo inicial</span><button type="button" class="pm" aria-label="Inverter sinal">±</button><input name="saldo" inputmode="decimal" placeholder="0,00" aria-label="Saldo inicial" autocomplete="off" value="${conta ? dinheiroIn(conta.saldoInicial) : ''}"></div>
         <label class="fld"><span>Data do saldo</span><input type="date" name="data" value="${conta?.dataInicial ?? hoje()}"></label>
+        <label class="fld"><span>Tipo</span><select name="tipo"><option value="banco">Banco</option><option value="beneficio"${conta?.tipo === 'beneficio' ? ' selected' : ''}>Benefício (VR, iFood)</option></select></label>
       </div>
       <div class="lab">Cor</div>${corHtml(conta?.cor ?? CORES[0])}
       <button class="btn" data-salvar style="margin-top:16px">Salvar</button>`), { onFechar: () => fim(null) });
@@ -69,7 +70,7 @@ export function abrirConta(conta) {
       if (!nome) return treme(q('nome').parentElement), q('nome').focus();
       if (isNaN(saldoInicial)) return treme(q('saldo').parentElement), q('saldo').focus();
       if (!/^\d{4}-\d\d-\d\d$/.test(dataInicial)) return treme(q('data').parentElement);
-      const c = { ...conta, nome, sigla: q('sigla').value.trim().toUpperCase() || iniciais(nome) || '?', cor: cor(), saldoInicial, dataInicial };
+      const c = { ...conta, nome, sigla: q('sigla').value.trim().toUpperCase() || iniciais(nome) || '?', cor: cor(), saldoInicial, dataInicial, tipo: q('tipo').value };
       const primeira = novo && !app.est.contas.length;
       salvarConta(app.est, c);
       app.salvarERender();

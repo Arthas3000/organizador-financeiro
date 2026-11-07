@@ -4,19 +4,9 @@
 
 App pessoal de finanças: registra receitas e despesas, mostra saldo por conta, gastos do mês, extrato e análise. Roda só no navegador (HTML, CSS e JavaScript puros), sem servidor e sem dependências. Instalado no iPhone como PWA.
 
-## Rodar localmente
-
-Na pasta do projeto:
-
-```
-python3 -m http.server 8000
-```
-
-Depois abra `http://localhost:8000` no navegador.
-
 ## Publicar no GitHub Pages
 
-1. Suba o projeto para um repositório no GitHub (branch `main`).
+1. Crie um repositório no GitHub e envie para ele **o conteúdo desta pasta** (os arquivos dela ficam na raiz do repositório, branch `main`).
 2. No repositório, vá em **Settings → Pages**.
 3. Em **Build and deployment**, escolha **Deploy from a branch**.
 4. Em **Branch**, escolha `main` e a pasta `/ (root)`. Clique em **Save**.
@@ -37,13 +27,15 @@ Os dados não são sincronizados. Para guardar uma cópia:
 1. No app, vá em **Mais → Exportar backup**.
 2. Guarde o arquivo gerado (por exemplo, no iCloud Drive ou no computador).
 
+Para trocar de aparelho (computador ↔ celular), use um de cada vez: exporte no aparelho que estava usando, leve o arquivo (AirDrop, iCloud Drive, e-mail) e use **Mais → Restaurar backup** no outro. Restaurar substitui tudo o que está no aparelho que recebe.
+
 Importação de PDF fica para a próxima versão.
 
 Para lançar pelo Atalho do iOS, use **Mais → Colar lançamentos → Como configurar o Atalho**.
 
 ## Atualizar versão
 
-1. Altere os arquivos do projeto.
+1. Altere os arquivos do app.
 2. Em `sw.js`, aumente o valor da constante `V` (por exemplo, de `v1` para `v2`). É isso que faz o celular baixar a nova versão.
-3. Envie as mudanças para `main` (ou faça o commit e o push).
+3. Envie os arquivos alterados para o repositório do GitHub.
 4. No iPhone, abra o app e aguarde. Se a versão antiga continuar, feche o app e abra de novo.

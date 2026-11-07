@@ -1,10 +1,10 @@
 // Início (spec §6.1): saldo, gastos do mês, contas, próximos 7 dias, lembrete de backup.
 import { app } from './app.js';
 import { esc, contar } from './ui.js';
-import { saldoTotal, saldoConta, resumoMes, fmt, mesDe, hoje as isoDe } from './logica.js';
+import { saldoTotal, saldoConta, resumoMes, ehBen, fmt, mesDe, hoje as isoDe } from './logica.js';
 import { abrirConta } from './cadastros.js';
 import { abrirLancamento } from './lancamento.js';
-import { linha } from './extrato.js';
+import { linha, filtrarConta } from './extrato.js';
 
 document.head.append(Object.assign(document.createElement('style'), { textContent: `
 .ini-card .lab { margin: 0 0 6px; }
@@ -12,6 +12,7 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 .ini-card small { display: block; margin-top: 4px; font-size: 12px; }
 .ini-ent { display: flex; justify-content: space-between; margin: 10px 6px 0; font-size: 14px; color: var(--t2); }
 .ini-ent b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.faixa[hidden] { display: none; }
 .faixa { display: flex; gap: 10px; margin: 0 -16px; padding: 2px 16px; overflow-x: auto; scrollbar-width: none; }
 .cta { flex: none; display: flex; flex-direction: column; gap: 8px; min-width: 144px; padding: 12px; border-radius: 20px; text-align: left; background: var(--card); }
 .cta b { display: block; font-weight: 500; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -20,9 +21,17 @@ document.head.append(Object.assign(document.createElement('style'), { textConten
 .ini-lemb { display: block; width: 100%; margin-top: 14px; padding: 12px 16px; border-radius: 18px; text-align: left; background: color-mix(in srgb, var(--purple) 12%, var(--card)); }
 .ini-lemb b { display: block; font-weight: 600; }
 .ini-card7 { padding: 0; overflow: hidden; }
+.pags { display: flex; margin: 0 -16px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.pags::-webkit-scrollbar { display: none; }
+.pag { flex: 0 0 100%; box-sizing: border-box; padding: 0 16px; scroll-snap-align: center; scroll-snap-stop: always; }
+.pag > .lab { margin-top: 0; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--t2); opacity: .3; transition: opacity .2s; }
+.dots i.on { opacity: 1; }
 .ini-card7 .vazio { padding: 22px; }
 ` }));
 
+let pag = 0; // 0 = Bancos, 1 = Benefícios
 const ultimo = {}; // números do último render, para animar só o que mudou
 const mesTitulo = m => { const t = new Date(m + '-01T12:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }).replace(' de ', ' '); return t[0].toUpperCase() + t.slice(1); };
 
@@ -43,15 +52,23 @@ export function render(el) {
     return;
   }
 
-  const r = resumoMes(est, mes, hj), saldo = saldoTotal(est, hj);
-  const nums = { saldo, gastos: r.saidas, entradas: r.entradas };
-  html += `<div class="dois">
-      <div class="card p ini-card"><div class="lab">Saldo</div><b class="ini-val ${saldo < 0 ? 'neg-c' : ''}" data-n="saldo">${fmt(saldo)}</b><small>&nbsp;</small></div>
-      <div class="card p ini-card"><div class="lab">Gastos do mês</div><b class="ini-val" data-n="gastos">${fmt(r.saidas)}</b><small>${r.previsto > 0 ? `+ ${fmt(r.previsto)} previstos` : 'nada previsto'}</small></div>
+  const temBen = est.contas.some(ehBen);
+  if (!temBen) pag = 0;
+  const nums = {};
+  const pagina = (ben, k, nome) => {
+    const r = resumoMes(est, mes, hj, ben), saldo = saldoTotal(est, hj, ben);
+    Object.assign(nums, { ['saldo' + k]: saldo, ['gastos' + k]: r.saidas, ['entradas' + k]: r.entradas });
+    return `<section class="pag" aria-label="${nome}">${temBen ? `<div class="lab"><span>${nome}</span></div>` : ''}<div class="dois">
+      <div class="card p ini-card"><div class="lab">Saldo</div><b class="ini-val ${saldo < 0 ? 'neg-c' : ''}" data-n="saldo${k}">${fmt(saldo)}</b><small>&nbsp;</small></div>
+      <div class="card p ini-card"><div class="lab">Gastos do mês</div><b class="ini-val" data-n="gastos${k}">${fmt(r.saidas)}</b><small>${r.previsto > 0 ? `+ ${fmt(r.previsto)} previstos` : 'nada previsto'}</small></div>
     </div>
-    <div class="ini-ent"><span>Entradas do mês</span><b class="pos" data-n="entradas">${fmt(r.entradas)}</b></div>
-    <div class="lab"><span>Contas</span></div>
-    <div class="faixa">${est.contas.map(c => `<button class="cta" data-conta="${esc(c.id)}"><i class="bk" style="background:${esc(c.cor)}">${esc(c.sigla)}</i><span><b>${esc(c.nome)}</b><small class="num">${fmt(saldoConta(est, c.id, hj))}</small></span></button>`).join('')}<button class="cta nova" data-conta aria-label="Nova conta">+ Conta</button></div>`;
+    <div class="ini-ent"><span>Entradas do mês</span><b class="pos" data-n="entradas${k}">${fmt(r.entradas)}</b></div></section>`;
+  };
+  const faixa = (ben, i) => `<div class="faixa" data-pag="${i}"${i !== pag ? ' hidden' : ''}>${est.contas.filter(c => ehBen(c) === ben).map(c => `<button class="cta" data-conta="${esc(c.id)}"><i class="bk" style="background:${esc(c.cor)}">${esc(c.sigla)}</i><span><b>${esc(c.nome)}</b><small class="num">${fmt(saldoConta(est, c.id, hj))}</small></span></button>`).join('')}<button class="cta nova" data-conta aria-label="Nova conta">+ Conta</button></div>`;
+  html += temBen
+    ? `<div class="pags">${pagina(false, 'B', 'Bancos')}${pagina(true, 'V', 'Benefícios')}</div><div class="dots" aria-hidden="true"><i${pag === 0 ? ' class="on"' : ''}></i><i${pag === 1 ? ' class="on"' : ''}></i></div>`
+    : `<div class="pags">${pagina(false, 'B', 'Bancos')}</div>`;
+  html += `<div class="lab"><span>Contas</span></div>${faixa(false, 0)}${temBen ? faixa(true, 1) : ''}`;
 
   const lim = new Date(hj + 'T12:00'); lim.setDate(lim.getDate() + 7);
   const limite = isoDe(lim);
@@ -64,6 +81,15 @@ export function render(el) {
 
   el.innerHTML = html;
   el.scrollTop = y;
+  const pg = el.querySelector('.pags');
+  pg.scrollLeft = pag * pg.clientWidth;
+  if (temBen) pg.addEventListener('scroll', () => {
+    const i = Math.round(pg.scrollLeft / pg.clientWidth);
+    if (i === pag) return;
+    pag = i;
+    el.querySelectorAll('.dots i').forEach((d, k) => d.classList.toggle('on', k === i));
+    el.querySelectorAll('.faixa[data-pag]').forEach(f => { f.hidden = +f.dataset.pag !== i; });
+  }, { passive: true });
   for (const [k, v] of Object.entries(nums)) {
     const n = el.querySelector(`[data-n=${k}]`);
     if (ultimo[k] !== undefined && ultimo[k] !== v) { n.textContent = fmt(ultimo[k]); contar(n, ultimo[k], v); }
@@ -75,7 +101,7 @@ function ligar(el) {
   el.addEventListener('click', e => {
     const t = e.target;
     const c = t.closest('[data-conta]');
-    if (c) return abrirConta(app.est.contas.find(x => x.id === c.dataset.conta));
+    if (c) { if (!c.dataset.conta) return abrirConta(); filtrarConta(c.dataset.conta); return app.irPara('extrato'); }
     if (t.closest('[data-backup]')) return app.irPara('mais');
     const row = t.closest('.lin-c');
     if (row) { const l = app.est.lancamentos.find(x => x.id === row.dataset.id); if (l) abrirLancamento(l); }
