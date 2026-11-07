@@ -4,7 +4,10 @@
   --bg: #f2f2f7; --card: #fff; --t: #1d1d1f; --t2: #6c6c70;
   --sep: rgba(60,60,67,.14);
   --blue: #0071e3; --fill: #0071e3; --green: #1e7f37; --red: #d70015; --purple: #8e3ec4; --orange: #c93400;
-  --glass: rgba(255,255,255,.62); --edge: rgba(255,255,255,.8);
+  /* Vidro no estilo Glisse (Liquid Glass): fio de 0,5px, brilho de borda, seleção neutra */
+  --glass: rgba(255,255,255,.6); --glass-on: rgba(236,236,240,.85); --edge: rgba(0,0,0,.08); --rim: rgba(255,255,255,.7);
+  --sel: rgba(0,0,0,.1); --track: rgba(118,118,128,.12); --thumb: #fff;
+  --surface: rgba(250,250,252,.86); --shadow: rgba(25,25,35,.12);
   --spring: cubic-bezier(.32,.72,0,1); --out: cubic-bezier(.2,.8,.2,1);
   --sb: env(safe-area-inset-bottom, 0px);
   --bar: 58px; --gap: 12px;
@@ -14,7 +17,9 @@
     --bg: #000; --card: #1c1c1e; --t: #f5f5f7; --t2: #98989f;
     --sep: rgba(255,255,255,.14);
     --blue: #409cff; --fill: #0a6bdc; --green: #30d158; --red: #ff453a; --purple: #bf8cf0; --orange: #ff9f0a;
-    --glass: rgba(30,30,32,.6); --edge: rgba(255,255,255,.16);
+    --glass: rgba(40,40,40,.62); --glass-on: rgba(70,70,70,.62); --edge: rgba(255,255,255,.08); --rim: rgba(255,255,255,.13);
+    --sel: rgba(255,255,255,.145); --track: rgba(118,118,128,.24); --thumb: rgba(235,235,245,.3);
+    --surface: rgba(28,28,31,.86); --shadow: rgba(0,0,0,.38);
   }
   :root .folha { --card: #2c2c2e; background: #1c1c1e; box-shadow: 0 -8px 40px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.1); }
 }
@@ -49,17 +54,24 @@ main { position: fixed; inset: 0; }
   position: fixed; z-index: 10; left: calc(var(--gap) + env(safe-area-inset-left, 0px)); right: calc(var(--gap) + env(safe-area-inset-right, 0px));
   bottom: calc(var(--gap) + var(--sb)); height: var(--bar); padding: 4px; border-radius: 999px;
   display: grid; grid-template-columns: repeat(4, 1fr);
-  background: var(--glass); box-shadow: 0 8px 24px rgba(0,0,0,.14), inset 0 0 0 1px var(--edge);
-  -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  background: var(--glass) linear-gradient(180deg, var(--rim), transparent 40%) ; box-shadow: 0 8px 24px var(--shadow), inset 0 0 0 .5px var(--edge), inset 0 1px 0 var(--rim);
+  -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
 }
+/* Brilho de toque: luz radial no vidro enquanto pressiona (instantâneo, some em 220ms) */
+.tabs::after, .fab::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.22), transparent 70%);
+  opacity: 0; transition: opacity .22s ease-in-out;
+}
+.tabs:active::after, .fab:active::after { opacity: 1; transition-duration: 0s; }
 .tabs .ind {
   position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 4); border-radius: 999px;
-  background: color-mix(in srgb, var(--blue) 14%, transparent);
+  background: var(--sel);
   transform: translateX(calc(var(--i) * 100%)); transition: transform .45s var(--spring);
 }
 .tabs button {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  font-size: 10px; font-weight: 500; color: var(--t2); border-radius: 999px; min-height: 44px;
+  font-size: 10px; font-weight: 500; color: var(--t); border-radius: 999px; min-height: 44px;
   transition: color .2s, transform .12s var(--out);
 }
 .tabs button[aria-current] { color: var(--blue); font-weight: 600; }
@@ -68,8 +80,8 @@ main { position: fixed; inset: 0; }
   bottom: calc(var(--gap) * 2 + var(--bar) + var(--sb)); width: 54px; height: 54px; border-radius: 50%;
   display: grid; place-items: center; color: #fff;
   background: color-mix(in srgb, var(--fill) 90%, transparent);
-  box-shadow: 0 8px 20px color-mix(in srgb, var(--fill) 40%, transparent), inset 0 0 0 1px rgba(255,255,255,.25);
-  -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--fill) 40%, transparent), inset 0 0 0 .5px rgba(255,255,255,.3), inset 0 1px 0 rgba(255,255,255,.35);
+  -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
   transition: transform .3s var(--spring), opacity .2s;
 }
 .fab.off { transform: scale(.5); opacity: 0; pointer-events: none; }
@@ -110,15 +122,16 @@ small, .t2 { color: var(--t2); }
 .chip { position: relative; flex: none; height: 36px; padding: 0 14px; border-radius: 999px; font-size: 14px; background: var(--card); }
 .chip::before { content: ""; position: absolute; inset: -4px 0; }
 .chip.on { background: var(--fill); color: #fff; }
-.seg { position: relative; display: flex; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--t) 8%, transparent); }
+.seg { position: relative; display: flex; padding: 3px; border-radius: 999px; background: var(--track); }
 .seg button { position: relative; z-index: 1; flex: 1; min-height: 38px; padding: 0 6px; font-size: 14px; border-radius: 999px; transition: color .2s, transform .12s var(--out); }
 .seg button.on { font-weight: 600; }
 .seg button::before { content: ""; position: absolute; inset: -3px 0; } /* área de toque 44px */
-.seg .pill { position: absolute; top: 3px; bottom: 3px; left: 3px; border-radius: 999px; background: var(--card); box-shadow: 0 1px 4px rgba(0,0,0,.14); transition: transform .35s var(--spring), width .35s var(--spring); }
+.seg .pill { position: absolute; top: 3px; bottom: 3px; left: 3px; border-radius: 999px; background: var(--thumb); box-shadow: 0 1px 3px rgba(0,0,0,.1), inset 0 0 0 .5px var(--edge); transition: transform .35s var(--spring), width .35s var(--spring); }
 
 /* Botões e campos */
 .btn { display: block; width: 100%; min-height: 48px; padding: 0 20px; border-radius: 999px; font-weight: 600; text-align: center; background: var(--fill); color: #fff; }
-.btn.sec { background: color-mix(in srgb, var(--t) 8%, transparent); color: var(--blue); }
+.btn.sec { background: var(--glass); box-shadow: inset 0 0 0 .5px var(--edge); color: var(--blue); }
+.btn.sec:active { background: var(--glass-on); }
 .btn.dest { background: color-mix(in srgb, var(--red) 12%, var(--card)); color: var(--red); }
 .btn[disabled] { opacity: .4; pointer-events: none; }
 .btn + .btn { margin-top: 8px; }
@@ -172,11 +185,12 @@ small, .t2 { color: var(--t2); }
   position: fixed; z-index: 30; left: 16px; right: 16px; margin: 0 auto; max-width: 420px;
   bottom: calc(var(--gap) * 3 + var(--bar) + 54px + var(--sb));
   display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-radius: 18px;
-  background: rgba(40,40,44,.96); color: #fff; font-size: 15px; box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  background: var(--surface); color: var(--t); font-size: 15px; box-shadow: 0 8px 24px var(--shadow), inset 0 0 0 .5px var(--edge);
+  -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
   opacity: 0; transform: translateY(16px); transition: opacity .25s, transform .35s var(--spring);
 }
 .toast.on { opacity: 1; transform: none; }
-.toast button { min-height: 44px; margin: -12px -8px -12px 0; padding: 0 8px; font-weight: 600; color: #6cb0ff; }
+.toast button { min-height: 44px; margin: -12px -8px -12px 0; padding: 0 8px; font-weight: 600; color: var(--blue); }
 
 /* Acessibilidade de movimento/transparência */
 @media (prefers-reduced-motion: reduce) {
@@ -188,11 +202,13 @@ small, .t2 { color: var(--t2); }
   .toast { transform: none; transition: opacity .15s; }
   .fab, .fab.off { transform: none; transition: opacity .15s; }
   button:active, .press:active { transform: none; }
+  .tabs::after, .fab::after { transition: none; }
   .bars i, .treme { animation: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
   .tabs { background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; }
   .fab { background: var(--fill); -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .toast { background: var(--card); -webkit-backdrop-filter: none; backdrop-filter: none; }
 }
 
 /* Painel de lançamento e cadastros */
@@ -218,4 +234,3 @@ input.amt::placeholder { color: var(--t2); opacity: .6; }
 .cor[aria-checked=true] { box-shadow: inset 0 0 0 3px var(--c); }
 .pm { flex: none; min-width: 44px; min-height: 36px; border-radius: 10px; font-weight: 600; color: var(--blue); }
 .fld .pm + input { flex: 1; }
-@media (prefers-color-scheme: dark) { .folha .seg .pill { background: #5a5a5e; } }
