@@ -234,3 +234,17 @@ input.amt::placeholder { color: var(--t2); opacity: .6; }
 .cor[aria-checked=true] { box-shadow: inset 0 0 0 3px var(--c); }
 .pm { flex: none; min-width: 44px; min-height: 36px; border-radius: 10px; font-weight: 600; color: var(--blue); }
 .fld .pm + input { flex: 1; }
+
+/* Tela de bloqueio (Face ID): visível no HTML desde o início; bloqueio.js esconde após autenticar */
+.bloqueio {
+  position: fixed; inset: 0; z-index: 100; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: 24px max(16px, env(safe-area-inset-right, 0px)) calc(24px + var(--sb)) max(16px, env(safe-area-inset-left, 0px));
+  text-align: center;
+}
+.bloqueio[hidden] { display: none; }
+.bloqueio img { border-radius: 16px; }
+.bloqueio h1 { margin: 0; font-size: 20px; font-weight: 600; }
+.bloqueio p { margin: 0; min-height: 1.3em; color: var(--t2); }
+.bloqueio button { min-height: 50px; padding: 0 24px; border-radius: 999px; background: var(--fill); color: #fff; font-weight: 600; }
+.bloqueio button[hidden] { display: none; }
