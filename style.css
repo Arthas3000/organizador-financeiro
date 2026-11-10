@@ -248,3 +248,6 @@ input.amt::placeholder { color: var(--t2); opacity: .6; }
 .bloqueio p { margin: 0; min-height: 1.3em; color: var(--t2); }
 .bloqueio button { min-height: 50px; padding: 0 24px; border-radius: 999px; background: var(--fill); color: #fff; font-weight: 600; }
 .bloqueio button[hidden] { display: none; }
+/* Input de arquivo invisível mas presente (display:none quebra a label em alguns iOS) */
+.oculto { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.lista label.it { cursor: pointer; position: relative; }

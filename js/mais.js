@@ -42,7 +42,7 @@ export function render(el) {
       ${linha('pdf', 'Importar extrato PDF', '<small class="hint" style="text-align:left;margin:0">em breve</small>', ' disabled')}
       ${linha('backup', 'Exportar backup')}
       ${linha('csv', 'Exportar CSV')}
-      ${linha('restaurar', 'Restaurar backup')}
+      <label class="it"><span class="tx"><b>Restaurar backup</b></span>${CH}<input type="file" id="restaurar" accept="application/json,.json" class="oculto"></label>
     </div>
     <div class="lab">Organização</div>
     <div class="card lista">
@@ -51,9 +51,11 @@ export function render(el) {
       ${linha('recorrentes', 'Recorrentes', `<small class="hint" style="text-align:left;margin:0">${ativas().length}</small>`)}
     </div>
     <p class="rod">${e.ultimoBackup ? `Último backup: ${esc(dataBR(e.ultimoBackup))}` : 'Nenhum backup feito ainda'}</p>`;
+  // iOS só entrega o arquivo com input real na página, aberto pelo toque na label (input.click() via JS falha calado)
+  el.querySelector('#restaurar').onchange = ev => restaurar(ev.target);
   el.onclick = ev => {
     const b = ev.target.closest('button[data-a]');
-    if (b) ({ colar, backup, csv, restaurar, contas, categorias, recorrentes })[b.dataset.a]?.();
+    if (b) ({ colar, backup, csv, contas, categorias, recorrentes })[b.dataset.a]?.();
   };
 }
 
@@ -77,21 +79,18 @@ const backup = () => {
 };
 const csv = () => entregar(toCSV(app.est), `organizador-${app.hoje}.csv`, 'text/csv').catch(() => toast('Não foi possível exportar'));
 
-function restaurar() {
-  const inp = Object.assign(document.createElement('input'), { type: 'file', accept: 'application/json,.json' });
-  inp.onchange = async () => {
-    const arq = inp.files[0]; if (!arq) return;
-    const r = validarBackup(await arq.text());
-    if (!r.ok) return toast(r.erro);
-    const { contas, lancamentos, ultimoBackup } = r.resumo;
-    const resumo = `${contas} contas, ${lancamentos} lançamentos${ultimoBackup ? `, backup de ${dataBR(ultimoBackup).slice(0, 5)}` : ''}. Isso substitui tudo o que está no app.`;
-    if (!await confirmar('Restaurar backup?', resumo, 'Substituir tudo', true)) return;
-    app.est = r.est;
-    completarRecorrentes(app.est, app.hoje);
-    app.salvarERender();
-    toast('Backup restaurado');
-  };
-  inp.click();
+async function restaurar(inp) {
+  const arq = inp.files[0]; inp.value = ''; // limpa: escolher o mesmo arquivo de novo dispara change
+  if (!arq) return;
+  const r = validarBackup(await arq.text());
+  if (!r.ok) return toast(r.erro);
+  const { contas, lancamentos, ultimoBackup } = r.resumo;
+  const resumo = `${contas} contas, ${lancamentos} lançamentos${ultimoBackup ? `, backup de ${dataBR(ultimoBackup).slice(0, 5)}` : ''}. Isso substitui tudo o que está no app.`;
+  if (!await confirmar('Restaurar backup?', resumo, 'Substituir tudo', true)) return;
+  app.est = r.est;
+  completarRecorrentes(app.est, app.hoje);
+  app.salvarERender();
+  toast('Backup restaurado');
 }
 
 // ---------- colar ----------
